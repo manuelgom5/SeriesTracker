@@ -2,10 +2,675 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SeriesStatus {
+  UPCOMING
+  IN_PRODUCTION
+  ONGOING
+  RETURNING
+  ENDED
+  RELEASED
+  CANCELED
+  PAUSED
+}
+
+enum NotificationType {
+  NEW_EPISODE
+  NEW_SEASON
+  SERIE_ENDED
+  MOVIE_RELEASED
+  CONTENT_CANCELED
+  COMMENT_REPLY
+  FRIEND_REQUEST
+  SYSTEM
+}
+
+enum MediaType {
+  POSTER
+  BACKDROP
+  STILL
+  PROFILE
+  LOGO
+}
+
+enum VideoType {
+  TRAILER
+  TEASER
+  CLIP
+  BEHIND_SCENES
+  INTERVIEW
+}
+
+model User {
+  id                  Int                       @id     @default(autoincrement())
+  email               String                    @unique
+  password            String
+  name                String
+  series              UserFollowSerie[]
+  watchedEpisodes     UserWatchedEpisode[]
+  watchHistory        WatchHistory[]
+  watchlists          Watchlist[]
+  collaborations      WatchlistCollaborator[]
+  watchlistLikes      WatchlistLike[]
+  followers           Follow[]                  @relation("Following")
+  following           Follow[]                  @relation("Follower")
+  notifications       Notification[]
+  ratings             Rating[]
+  reviewVotes         ReviewVote[]
+  comments            Comment[]
+  questions           Question[]
+  answers             Answer[]
+  uploadedMedia       Media[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  deletedAt           DateTime?
+  @@map("users")
+}
+
+model Follow {
+  id                  Int                       @id     @default(autoincrement())
+  followerId          Int
+  follower            User                      @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId         Int
+  following           User                      @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt           DateTime                  @default(now())
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+  @@map("follows")
+}
+
+model Serie {
+  id                  Int                       @id     @default(autoincrement())
+  title               String
+  description         String
+  poster              String?
+  score               Float                     @default(0)
+  status              SeriesStatus              @default(ONGOING)
+  releaseDate         DateTime?
+  dateLastSeason      DateTime?
+  totalSeasons        Int
+  totalEpisodes       Int
+  genres              SeriesGenre[]
+  platforms           SeriesPlatform[]
+  networks            SerieNetwork[]
+  countries           SerieCountry[]
+  languages           SerieLanguage[]
+  productions         SerieProduction[]
+  seasons             Season[]
+  episodes            Episode[]
+  cast                Cast[]
+  crew                Crew[]
+  followedBy          UserFollowSerie[]
+  watchlists          WatchlistSerie[]
+  ratings             Rating[]
+  comments            Comment[]
+  questions           Question[]
+  notifications       Notification[]
+  media               Media[]
+  videos              Video[]
+  awards              Award[]
+  similarSeries       SimilarSerie[]            @relation("Serie")
+  similarTo           SimilarSerie[]            @relation("Similar")
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  deletedAt           DateTime?
+
+  @@index([status])
+  @@index([score])
+  @@map("series")
+}
+
+model Season {
+  id                  Int                       @id     @default(autoincrement())
+  seasonNumber        Int
+  name                String?
+  overview            String?
+  episodeCount        Int
+  poster              String?
+  releaseDate         DateTime?
+  serieId             Int
+  serie               Serie                     @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  episodes            Episode[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@unique([serieId, seasonNumber])
+  @@index([serieId])
+  @@map("seasons")
+}
+
+model Episode {
+  id                  Int                       @id     @default(autoincrement())
+  name                String
+  description         String
+  number              Int
+  photo               String?
+  duration            Int?
+  score               Float                     @default(0)
+  releaseDate         DateTime?
+  serieId             Int
+  serie               Serie                     @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  seasonId            Int
+  season              Season                    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  comments            Comment[]
+  ratings             Rating[]
+  questions           Question[]
+  media               Media[]
+  videos              Video[]
+  watchedBy           UserWatchedEpisode[]
+  watchHistory        WatchHistory[]
+  notifications       Notification[]
+  releaseCalendar     ReleaseCalendar[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@index([serieId, seasonId, number])
+  @@index([serieId])
+  @@index([seasonId])
+  @@index([releaseDate])
+  @@map("episodes")
+}
+
+model Comment {
+  id                  Int                       @id     @default(autoincrement())
+  text                String
+  isSpoiler           Boolean                   @default(false)
+  userId              Int
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serieId             Int?
+  serie               Serie?                    @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  episodeId           Int?
+  episode             Episode?                  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@index([userId])
+  @@index([serieId, createdAt])
+  @@index([episodeId, createdAt])
+  @@map("comments")
+}
+
+model Rating {
+  id                  Int                       @id     @default(autoincrement())
+  score               Int
+  review              String?
+  containsSpoilers    Boolean                   @default(false)
+  helpfulVotes        Int                       @default(0)
+  notHelpfulVotes     Int                       @default(0)
+  reported            Boolean                   @default(false)
+  reportReason        String?
+  userId              Int
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serieId             Int?
+  serie               Serie?                    @relation(fields: [serieId], references: [id], onDelete: SetNull)
+  episodeId           Int?
+  episode             Episode?                  @relation(fields: [episodeId], references: [id], onDelete: SetNull)
+  votes               ReviewVote[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@index([score])
+  @@index([userId])
+  @@index([serieId, helpfulVotes])
+  @@index([episodeId])
+  @@map("ratings")
+}
+
+model ReviewVote {
+  id                  Int                       @id     @default(autoincrement())
+  userId              Int
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ratingId            Int
+  rating              Rating                    @relation(fields: [ratingId], references: [id], onDelete: Cascade)
+  helpful             Boolean
+  createdAt           DateTime                  @default(now())
+
+  @@unique([userId, ratingId])
+  @@map("review_votes")
+}
+
+model Question {
+  id                  Int                       @id     @default(autoincrement())
+  title               String
+  body                String
+  isSpoiler           Boolean                   @default(false)
+  votes               Int                       @default(0)
+  userId              Int
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serieId             Int?
+  serie               Serie?                    @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  episodeId           Int?
+  episode             Episode?                  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  answers             Answer[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@index([serieId])
+  @@index([episodeId])
+  @@index([userId])
+  @@map("questions")
+}
+
+model Answer {
+  id                  Int                       @id     @default(autoincrement())
+  body                String
+  votes               Int                       @default(0)
+  accepted            Boolean                   @default(false)
+  questionId          Int
+  question            Question                  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  userId              Int
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@index([questionId])
+  @@map("answers")
+}
+
+model UserFollowSerie {
+  id                  Int                       @id     @default(autoincrement())
+  userId              Int
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serieId             Int
+  serie               Serie                     @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  createdAt           DateTime                  @default(now())
+
+  @@unique([userId, serieId])
+  @@index([userId])
+  @@index([serieId])
+  @@map("user_follows_series")
+}
+
+model UserWatchedEpisode {
+  id                  Int                       @id     @default(autoincrement())
+  progress            Int                       @default(100)
+  completed           Boolean                   @default(true)
+  userId              Int
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episodeId           Int
+  episode             Episode                   @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  watchedAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@unique([userId, episodeId])
+  @@index([userId])
+  @@index([episodeId])
+  @@index([watchedAt])
+  @@map("user_watched_episodes")
+}
+
+model WatchHistory {
+  id                  Int                       @id     @default(autoincrement())
+  userId              Int
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episodeId           Int
+  episode             Episode                   @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  startedAt           DateTime
+  finishedAt          DateTime?
+  duration            Int?
+  completed           Boolean                   @default(false)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@index([userId])
+  @@index([episodeId])
+  @@map("watch_history")
+}
+
+model Watchlist {
+  id                  Int                       @id     @default(autoincrement())
+  name                String
+  description         String?
+  isPublic            Boolean                   @default(false)
+  isCollaborative     Boolean                   @default(false)
+  userId              Int
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  series              WatchlistSerie[]
+  likes               WatchlistLike[]
+  collaborators       WatchlistCollaborator[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@map("watchlists")
+}
+
+model WatchlistSerie {
+  id                  Int                       @id     @default(autoincrement())
+  watchlistId         Int
+  watchlist           Watchlist                 @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  serieId             Int
+  serie               Serie                     @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  addedAt             DateTime                  @default(now())
+
+  @@unique([watchlistId, serieId])
+  @@map("watchlist_series")
+}
+
+model WatchlistCollaborator {
+  id                  Int                       @id     @default(autoincrement())
+  userId              Int
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  watchlistId         Int
+  watchlist           Watchlist                 @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  canEdit             Boolean                   @default(true)
+  addedAt             DateTime                  @default(now())
+
+  @@unique([userId, watchlistId])
+  @@map("watchlist_collaborators")
+}
+
+model WatchlistLike {
+  id                  Int                       @id     @default(autoincrement())
+  userId              Int
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  watchlistId         Int
+  watchlist           Watchlist                 @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  createdAt           DateTime                  @default(now())
+
+  @@unique([userId, watchlistId])
+  @@map("watchlist_likes")
+}
+
+model Notification {
+  id                  Int                       @id     @default(autoincrement())
+  type                NotificationType
+  message             String
+  isRead              Boolean                   @default(false)
+  userId              Int
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serieId             Int?
+  serie               Serie?                    @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  episodeId           Int?
+  episode             Episode?                  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  createdAt           DateTime                  @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model Genre {
+  id                  Int                       @id     @default(autoincrement())
+  name                String                    @unique
+  series              SeriesGenre[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  @@map("genres")
+}
+
+model SeriesGenre {
+  id                  Int                       @id     @default(autoincrement())
+  serieId             Int
+  serie               Serie                     @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  genreId             Int
+  genre               Genre                     @relation(fields: [genreId], references: [id], onDelete: Cascade)
+  createdAt           DateTime                  @default(now())
+
+  @@unique([serieId, genreId])
+  @@map("series_genres")
+}
+
+model Platform {
+  id                  Int                       @id     @default(autoincrement())
+  name                String                    @unique
+  logo                String?
+  series              SeriesPlatform[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@map("platforms")
+}
+
+model SeriesPlatform {
+  id                  Int                       @id     @default(autoincrement())
+  serieId             Int
+  serie               Serie                     @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  platformId          Int
+  platform            Platform                  @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  url                 String?
+  createdAt           DateTime                  @default(now())
+
+  @@unique([serieId, platformId])
+  @@index([serieId])
+  @@map("series_platforms")
+}
+
+model Network {
+  id                  Int                       @id     @default(autoincrement())
+  name                String                    @unique
+  logo                String?
+  country             String?
+  series              SerieNetwork[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@map("networks")
+}
+
+model SerieNetwork {
+  id                  Int                       @id     @default(autoincrement())
+  serieId             Int
+  serie               Serie                     @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  networkId           Int
+  network             Network                   @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  createdAt           DateTime                  @default(now())
+
+  @@unique([serieId, networkId])
+  @@map("series_networks")
+}
+
+model Country {
+  id                  Int                       @id     @default(autoincrement())
+  code                String                    @unique
+  name                String
+  series              SerieCountry[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@map("countries")
+}
+
+model SerieCountry {
+  id                  Int                       @id     @default(autoincrement())
+  serieId             Int
+  serie               Serie                     @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  countryId           Int
+  country             Country                   @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  createdAt           DateTime                  @default(now())
+
+  @@unique([serieId, countryId])
+  @@map("series_countries")
+}
+
+model Language {
+  id                  Int                       @id     @default(autoincrement())
+  code                String                    @unique
+  name                String
+  series              SerieLanguage[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@map("languages")
+}
+
+model SerieLanguage {
+  id                  Int                       @id     @default(autoincrement())
+  serieId             Int
+  serie               Serie                     @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  languageId          Int
+  language            Language                  @relation(fields: [languageId], references: [id], onDelete: Cascade)
+  original            Boolean                   @default(false)
+  createdAt           DateTime                  @default(now())
+
+  @@unique([serieId, languageId])
+  @@map("series_languages")
+}
+
+model ProductionCompany {
+  id                  Int                       @id     @default(autoincrement())
+  name                String                    @unique
+  logo                String?
+  series              SerieProduction[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@map("production_companies")
+}
+
+model SerieProduction {
+  id                  Int                       @id     @default(autoincrement())
+  serieId             Int
+  serie               Serie                     @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  companyId           Int
+  company             ProductionCompany         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt           DateTime                  @default(now())
+
+  @@unique([serieId, companyId])
+  @@map("series_production_companies")
+}
+
+model Person {
+  id                  Int                       @id     @default(autoincrement())
+  name                String
+  photo               String?
+  biography           String?
+  birthDate           DateTime?
+  cast                Cast[]
+  crew                Crew[]
+  awards              Award[]
+  media               Media[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  deletedAt           DateTime?
+
+  @@map("people")
+}
+
+model Cast {
+  id                  Int                       @id     @default(autoincrement())
+  serieId             Int
+  serie               Serie                     @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  personId            Int
+  person              Person                    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  character           String
+  order               Int?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@unique([serieId, personId, character])
+  @@index([serieId])
+  @@map("cast_members")
+}
+
+model Crew {
+  id                  Int                       @id     @default(autoincrement())
+  serieId             Int
+  serie               Serie                     @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  personId            Int
+  person              Person                    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  role                String
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@unique([serieId, personId, role])
+  @@index([serieId])
+  @@index([personId])
+  @@map("crew_members")
+}
+
+model Award {
+  id                  Int                       @id     @default(autoincrement())
+  name                String
+  category            String
+  year                Int
+  winner              Boolean                   @default(false)
+  serieId             Int?
+  serie               Serie?                    @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  personId            Int?
+  person              Person?                   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@index([serieId])
+  @@index([personId])
+  @@index([year])
+  @@map("awards")
+}
+
+model Media {
+  id                  Int                       @id     @default(autoincrement())
+  url                 String
+  type                MediaType
+  caption             String?
+  serieId             Int?
+  serie               Serie?                    @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  episodeId           Int?
+  episode             Episode?                  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  personId            Int?
+  person              Person?                   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  uploadedBy          Int
+  user                User                      @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@index([serieId])
+  @@index([episodeId])
+  @@index([personId])
+  @@index([uploadedBy])
+  @@map("media")
+}
+
+model Video {
+  id                  Int                       @id     @default(autoincrement())
+  title               String
+  url                 String
+  type                VideoType
+  serieId             Int?
+  serie               Serie?                    @relation(fields: [serieId], references: [id], onDelete: Cascade)
+  episodeId           Int?
+  episode             Episode?                  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@index([serieId])
+  @@index([episodeId])
+  @@map("videos")
+}
+
+model SimilarSerie {
+  id                  Int                       @id     @default(autoincrement())
+  serieId             Int
+  serie               Serie                     @relation("Serie", fields: [serieId], references: [id], onDelete: Cascade)
+  similarId           Int
+  similar             Serie                     @relation("Similar", fields: [similarId], references: [id], onDelete: Cascade)
+  score               Float                     @default(0)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@unique([serieId, similarId])
+  @@index([serieId])
+  @@map("similar_series")
+}
+
+model ReleaseCalendar {
+  id                  Int                       @id     @default(autoincrement())
+  episodeId           Int
+  episode             Episode                   @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  airDate             DateTime
+  timezone            String                    @default("UTC")
+  confirmed           Boolean                   @default(false)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@index([airDate])
+  @@index([episodeId])
+  @@map("release_calendars")
 }
